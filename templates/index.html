@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="../static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../static/css/bootstrap-select.min.css">
+
+    <script type="text/javascript" src="../static/js/jquery-3.3.1.min.js"></script>
+    <script type="text/javascript" src="../static/js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="../static/js/bootstrap-select.min.js"></script>
+    <script type="text/javascript" src="../static/js/i18n/defaults-zh_CN.min.js"></script>
+    <script type="text/javascript" src="../static/js/mission.js"></script>
+
+    <script>
+        Static_Mission = null;
+        $(document).ready(function () {
+            initialize();
+            load_meta();
+            list_mission();
+        });
+        //初始化
+        function initialize() {
+            $("#HAVI_Node").selectpicker();
+            $("#HAVI_Permission").selectpicker();
+            $("#HAVI_Config").selectpicker();
+            $("#submit_button").click(function () {
+                submit();
+            });
+            $("#clear_button").click(function () {
+                clear();
+            });
+            $("#log_reload_btn").click(function () {
+                showLog(Static_Mission);
+            });
+            $("#log_clear_btn").click(function () {
+                clearLog()
+            })
+        }
+        //获得下拉框数据
+        function load_meta() {
+            $.ajax("/load-meta/", {
+                type: "GET",
+                dataType: "json"
+            }).done(function (obj) {
+                var result = obj.result;
+                if (result == "success") {
+                    var nodes = obj.data.nodes;
+                    for (var idx = 0; idx < nodes.length; idx++) {
+                        var option = $("<option/>");
+                        option.val(nodes[idx]);
+                        option.text(nodes[idx]);
+                        option.appendTo($("#HAVI_Node"));
+                    }
+                    $("#HAVI_Node").selectpicker("refresh");
+                    var permissions = obj.data.permissions;
+                    for (var idx = 0; idx < permissions.length; idx++) {
+                        var option = $("<option/>");
+                        option.val(permissions[idx]);
+                        option.text(permissions[idx]);
+                        option.appendTo($("#HAVI_Permission"));
+                    }
+                    $("#HAVI_Permission").selectpicker("refresh");
+                    var configs = obj.data.configs;
+                    for (var idx = 0; idx < configs.length; idx++) {
+                        var option = $("<option/>");
+                        option.val(configs[idx]);
+                        option.text(configs[idx]);
+                        option.appendTo($("#HAVI_Config"));
+                    }
+                    $("#HAVI_Config").selectpicker("refresh");
+                } else {
+                    alert(obj.context)
+                }
+            })
+        }
+
+        //提交
+        function submit() {
+            var mission = MissionFromEdit();
+            $.ajax("/submit/", {
+                type: "POST",
+                data: {"data": JSON.stringify(mission.toJSON())}
+            }).done(function (obj) {
+                var result = obj.result;
+                if (result == "success") {
+                    alert("提交成功");
+                    list_mission();
+                } else {
+                    alert(obj.context)
+                }
+            })
+        }
+        //清除
+        function clear() {
+            $("#user").val("");
+            $("#password").val("");
+            $("#HAVI_Node").val("");
+            $("#HAVI_Permission").val("");
+            $("#HAVI_Config").val("");
+            $("#HAVI_Node").selectpicker("refresh");
+            $("#HAVI_Permission").selectpicker("refresh");
+            $("#HAVI_Config").selectpicker("refresh");
+        }
+
+        //列出所有
+        function list_mission() {
+            $.ajax("/list/", {
+                type: "GET",
+                dataType: "json"
+            }).done(function (obj) {
+                var result = obj.result;
+                if (result == "success") {
+                    $("#MissionTable .mission-row").remove();
+                    var missions = obj.data;
+                    for (var idx = 0; idx < missions.length; idx++) {
+                        var mission = Mission.fromJSON(missions[idx]);
+                        addMissionRow(mission);
+                    }
+                } else {
+                    alert(obj.context)
+                }
+            })
+        }
+        //把每一行都展示出来
+        function addMissionRow(mission) {
+            var row = $('<tr class="mission-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>');
+            $("td:eq(0)", row).text(mission.id);
+            $("td:eq(1)", row).text(mission.user);
+            $("td:eq(2)", row).text(mission.password);
+            $("td:eq(3)", row).text(mission.node);
+            $("td:eq(4)", row).text(mission.permission);
+            $("td:eq(5)", row).text(mission.config);
+            $("td:eq(6)", row).text(mission.createTS);
+            $("td:eq(7)", row).text("状态");
+            var do_show_log_btn = $('<button id="showLog_' + mission.id + '" type="button" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span> Logs</button>');
+            (function (do_show_log_btn, mission) {
+                do_show_log_btn.click(function (e) {
+                    beginViewLog(mission);
+                })
+            })(do_show_log_btn, mission);
+            do_show_log_btn.appendTo($("td:eq(8)", row))
+            row.appendTo("#MissionTable")
+        }
+
+        function MissionFromEdit() {
+            var mission = new Mission();
+            mission.user = $("#user").val();
+            mission.password = $("#password").val();
+            mission.node = $("#HAVI_Node").val();
+            mission.permission = $("#HAVI_Permission").val();
+            mission.config = $("#HAVI_Config").val();
+            return mission;
+        }
+
+        function beginViewLog(mission) {
+            Static_Mission = mission;
+            showLog(mission);
+        }
+        //列出当前任务的日志
+        function showLog(mission) {
+            $.ajax("/show-log/", {
+                type: "POST",
+                data: {"data":JSON.stringify({
+                    "size": $("#mission_log_limit").selectpicker("val"),
+                    "id": mission.id
+                })}
+            }).done(function (obj) {
+                var result = obj.result;
+                if (result == "success") {
+                    var log_box = $("#mission_log_box");
+                    log_box.empty();
+                    $("#actiove_ID").val(mission.id);
+{#                    alert($("#actiove_ID").val());#}
+                    for (var idx = 0; idx < obj.lines.length; idx++) {
+                        var log_row=$('<p class="view-log-line" style="margin: 0 0;line-height:120%"></p>')
+                        log_row.text(obj.lines[idx]);
+                        log_row.appendTo(log_box);
+                    }
+                } else {
+                    alert(obj.context)
+                }
+            })
+        }
+        //清除
+        function clearLog() {
+            $("#mission_log_box").empty();
+            $("#actiove_ID").val("");
+        }
+        //从页面获得mission对象
+
+
+
+
+    </script>
+</head>
+
+<body>
+
+<div class="form-group form-group-sm">
+    <label for="user" class=control-label">用户</label>
+    <div class="col-sm-9">
+        <input type="text" class="form-control apikey-edit-form" id="user" value="" placeholder=""/>
+    </div>
+</div>
+
+<div class="form-group form-group-sm">
+    <label for="password" class="col-sm-3 control-label">密码</label>
+    <div class="col-sm-9">
+        <input type="text" class="form-control apikey-edit-form" id="password" value="" placeholder=""/>
+    </div>
+</div>
+
+<div class="form-group form-group-sm">
+    <label for="HAVI_Node" class="col-sm-3 control-label">HAVI服务器</label>
+    <div class="col-sm-9">
+        <select class="selectpicker" multiple data-style="btn-primary btn-sm" id="HAVI_Node"></select>
+    </div>
+</div>
+
+<div class="form-group form-group-sm">
+    <label for="HAVI_Permission" class="col-sm-3 control-label">HAVI用户组</label>
+    <div class="col-sm-9">
+        <select class="selectpicker" multiple data-style="btn-primary btn-sm" id="HAVI_Permission"></select>
+    </div>
+</div>
+
+<div class="form-group form-group-sm">
+    <label for="HAVI_Config" class="col-sm-3 control-label">特殊环境</label>
+    <div class="col-sm-9">
+        <select class="selectpicker" multiple data-style="btn-primary btn-sm" id="HAVI_Config"></select>
+    </div>
+</div>
+
+<button id="submit_button">submit</button>
+
+<button id="clear_button">clear</button>
+
+<div role="tabpanel" class="tab-panel active" id="MissionTab">
+    <table class="table table-hover tab" id="MissionTable">
+        <tr>
+            <th>
+                ID
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                用户名
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                密码
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                服务器
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                用户组(权限)
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                特殊环境
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                开始运行时间
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>
+                状态
+                <span class="glyphicon glyphicon-sort" aria-hidden="true" style="cursor: pointer;"></span>
+            </th>
+            <th>Operation</th>
+        </tr>
+    </table>
+</div>
+
+<div class="modal fade" id="mission_log" tabindex="-1" role="dialog" aria-labelledby="mission_logs" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div>
+                    <div>
+                        <label for="actiove_ID" class="col-sm-3 control-label">ID</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control apikey-edit-form" id="actiove_ID" readonly="readonly"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-content">
+                    <div role="tabpanel" class="tab-pane active" id="mission_log">
+                        <form class="form-horizontal" role="form">
+                            <div class="form-group">
+                                <label for="mission_log_limit" class="col-sm-3 control-label">Lines to show</label>
+                                <div class="col-sm-9">
+                                    <select class="selectpicker" id="mission_log_limit" data-style="btn-primary btn-sm">
+                                        <option value="10">100</option>
+                                        <option value="20">200</option>
+                                        <option value="50">500</option>
+                                        <option value="100">1000</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                        <div style="width:100%; background-color:black; color:#00ff00;padding:1em;" id="mission_log_box"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-info btn-sm" id="log_reload_btn">
+                    <span class="glyphicon plyphicon-refresh" aria-hidden="true"></span>
+                    Refresh
+                </button>
+                <button type="button" class="btn btn-default btn-sm" id="log_clear_btn">
+                    <span class="glyphicon plyphicon-ban-circle" aria-hidden="true"></span>
+                    Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
